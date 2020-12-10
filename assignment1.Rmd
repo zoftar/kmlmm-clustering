@@ -1,0 +1,97 @@
+---
+title: "Density estimation, clustering, PCA and
+principal curves"
+author: "Gonzalo ?, Zofia Tarant"
+date: "11 12 2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r data reading}
+data <- read.table('zip.train')
+# get only zeros
+data <- data[which(data[1]==0),]
+```
+```{r plot function, echo=FALSE}
+plot.zip <- function(x,use.first=FALSE){
+  x<-as.numeric(x)
+  if (use.first){
+    x.mat <- matrix(x,16,16)
+  }else{
+    x.mat <- matrix(x[-1],16,16)
+  }
+  image(1:16,1:16,x.mat[,16:1],
+        col=gray(seq(1,0,l=12)))
+  if (!use.first) title(x[1])
+  #col=gray(seq(1,0,l=2)))
+}
+```
+
+## Hierarchical clustering
+
+Euclidean distance:
+```{r Euclidean distance}
+d.Eucl <- dist(data)
+summary(d.Eucl)
+```
+
+Clustering:
+
+
+```{r hierarchical clustering}
+k <- 4
+hcl.Eucl <- hclust(d.Eucl, method="ward.D")
+plot(hcl.Eucl)
+hcl.Eucl.k <- cutree(hcl.Eucl,k)
+table(hcl.Eucl.k)
+
+data.clustered <- data
+data.clustered$cluster <- hcl.Eucl.k
+
+# Plot the average digit of each cluster
+op<-par(mfrow=c(2,2))
+for (i in 1:k) {
+  cluster <- data.clustered[which(data.clustered$cluster == i),-257]
+  mean.digit <- colMeans(cluster)
+  plot.zip(mean.digit)
+  title(paste("cluster", i, sep=" "))
+}
+
+```
+## Principal components
+
+```{r PCs}
+clustered.PC <- princomp(data.clustered[,-c(1, 257)])
+summary(clustered.PC)
+```
+```{r scatterplot of PC}
+plot(clustered.PC$scores[,1:2],pch=19,cex=.5,col=data.clustered$cluster)
+```
+## Density estimation
+
+4. For each one of the k clusters obtained above, do the following tasks:
+• Consider the bivariate data set of the scores in PC1 and PC2 of the points in this cluster.
+• Estimate non-parametrically the joint density of (PC1,PC2), conditional to this cluster. Use the default
+bandwith values.
+• Represent the estimated bivariate density using the level curve that covers the 75% of the points in this
+cluster.
+A unique plot should be done, at which the k densities are represented simultaneously.
+
+```{r density estimation}
+# clustered.PC$scores[,1:2]
+density(clustered.PC$scores[,1:2])
+```
+
+5. Over the prvious plot, represent the principal curve obtained using the package princurve.
+6. For each one of the k clusters obtained above, do the following tasks:
+• Consider the univariate data set of the lambda scores over the principal curve of the points in this
+cluster.
+• Estimate non-parametrically the density function of lambda, conditional to this cluster. Use the default
+bandwith value.
+• Plot the estimated density function.
+A unique plot should be done, at which the k densities are represented simultaneously.
