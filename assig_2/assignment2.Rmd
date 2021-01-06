@@ -41,26 +41,22 @@ Q1. Write a function that computes MadjK′ as a function of two distance matric
 
 ```{r Q1}
 library(smacof)
-common.neighbors <- function(D, X, k) {
-  wD <- dissWeights(D, type = "knn", k = k)
-  wD.1 <- (wD==1)
-  wD.1<-matrix(wD.1, nrow=n)
-  wX <- dissWeights(X, type = "knn", k = k)
-  wX.1 <- wX==1
-  wX.1 <- matrix(wX.1, nrow=n)
-  rowSums((wD.1 & wX.1) == TRUE)
+common.neighbors <- function(D, X, K_) {
+  wD <- as.matrix(dissWeights(D, type = "knn", k = K_))
+  wX <- as.matrix(dissWeights(X, type = "knn", k = K_))
+  rowSums(wD & wX)
 }
 
-calculate.M.K <- function(D, X, K) {
-  N.K = mean(common.neighbors(D,X,K))
+calculate.M.K_ <- function(D, X, K_) {
+  N.K_ = mean(common.neighbors(D,X,K_))
 
-  N.K/K
+  N.K_/K_
 }
-calculate.adj.M.K <- function(D, X, K) {
+calculate.adj.M.K_ <- function(D, X, K_) {
   # D - high dim. matrix
   # X - euclidean distance matrix
-  M.K <- calculate.M.K(D, X, K)
-  M.K-K/(n-1)
+  M.K_ <- calculate.M.K_(D, X, K_)
+  M.K_-K_/(n-1)
 }
 
 ```
@@ -71,9 +67,6 @@ Looking for optimal K, tau according to the paper by the Chen and Buja paper fro
 
 ```{r Q2}
 
-# Local MDS. Implemented by Pedro Delicado, December 2020
-#
-# Objective function in Local MDS, eq (7) in Chen and Buja (2009)
 Stress.LocalMDS <- function(conf,n,dist.orig,k=5,tau=1){
   require(smacof)
   q<-1
@@ -86,66 +79,47 @@ Stress.LocalMDS <- function(conf,n,dist.orig,k=5,tau=1){
   t <- (card.N.k/card.N.k.c)*median(dist.orig[w.1])*tau
   return(sum((dist.orig[w.1]-Eucl.dist[w.1])^2) - t*sum(Eucl.dist[!w.1]))
 }
-conf0 <- as.numeric(cmdscale(dist(XYZ)))
-mconf <- matrix(cmdscale(dist(XYZ)),nrow = n, byrow = FALSE) # configuration matrix
-Eucl.dist <- dist(dist(XYZ))
+conf0 <- as.numeric(cmdscale(distXYZ))
 
-
-k <- 10
 K.search <- c(5,10,15)
+tau.search <- c(.1, .5, 1)
+best_M.K_ <- NULL
+for(K in K.search) {
+  for(tau in tau.search) {
+    localMDS.S.res <- optim(par=conf0, fn=Stress.LocalMDS, n=n, dist.orig=distXYZ, k=K, tau=tau, method ="BFGS", control = list(maxit=20))
+    conf.localMDS.S.res <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
+    
+    K_ <- 10
+    M.K_ <- calculate.adj.M.K_(distXYZ, dist(conf.localMDS.S.res), K_)
+    print(M.K_)
+    if(is.null(best_M.K_) || best_M.K_ < M.K_) {
+      best_M.K_ <- M.K_
+      best_K <- K
+      best_tau <- tau
+      best_conf <- conf.localMDS.S.res
+    }
+  }
+}
 
-
-# find optimal K 
-library(purrr)
-adjusted.M.K <- map(K.search, function(kk) calculate.adj.M.K(D=dist(XYZ), X=Eucl.dist, K=kk))
-plot(K.search, adjusted.M.K )
+print("Best K:")
+print(best_K)
+print("Best tau:")
+print(best_tau)
 
 ```
-The value of adjusted MK' is best for K=5.
 ```{r}
-
-# optimal K'
-K <- 5
-
-
-# Find optimal tau
-tau.search <- c(.1, .5, 1)
-for (t in tau.search) {
-  localMDS.S.res <- optim(par=conf0, fn=Stress.LocalMDS, n=n,dist.orig=dist(XYZ),k=K,tau=t,
-                        method ="BFGS", control = list(maxit=20))
-  LocalMDS.max <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
-  plot(LocalMDS.max)
-}
-# IDK how to decide which tau is the best
 ```
 
 
 
 Q3. Graphical representation of the Local MDS output For the optimal K and τ, the output of the Local MDS is a q-dimensional configuration, that is, a n×q matrix (in our case with q=1).
 ```{r}
-# Local MDS. Implemented by Pedro Delicado, December 2020
-#
-# Objective function in Local MDS, eq (7) in Chen and Buja (2009)
-Stress.LocalMDS <- function(conf,n,dist.orig,k=5,tau=1){
-  require(smacof)
-  q<-1
-  mconf <- matrix(conf,nrow = n, byrow = FALSE) # configuration matrix
-  Eucl.dist <- dist(mconf)
-  w <- dissWeights(dist.orig, type = "knn", k = k)
-  w.1 <- (w==1)
-  card.N.k <- sum(w.1)
-  card.N.k.c <- n*(n-1)/2 - card.N.k
-  t <- (card.N.k/card.N.k.c)*median(dist.orig[w.1])*tau
-  return(sum((dist.orig[w.1]-Eucl.dist[w.1])^2) - t*sum(Eucl.dist[!w.1]))
-}
-tau <- .5
-q<-1 
-conf0 <- as.numeric(cmdscale(dist(XYZ)))
-localMDS.S.res <- optim(par=conf0, fn=Stress.LocalMDS, n=n,dist.orig=dist(XYZ),k=k,tau=tau,
-                        method ="BFGS", control = list(maxit=20))
-LocalMDS.max <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
-pairs(cbind(XYZ,rt,locMDS=LocalMDS.max[,1]))
+# Here we need to use q somehow:
+pairs(cbind(XYZ,rt,locMDS=best_conf[,1]))
 ```
+
+
+
 Q4. Choose the parameter k maximizing the Local Continuity Meta-criteria.
 Use K′=10 and restrict the search of k to seq(4,15).
 
@@ -153,7 +127,7 @@ Do a plot of the pairs (k,LC(k)) and write the optimal value of k.
 ```{r}
 k.search.range <- seq(4,15)
 K <- 10
-LC <- map(K.search.range, function(kk) calculate.adj.M.K(D=dist(XYZ), X=Eucl.dist, K=kk))
+LC <- map(K.search.range, function(kk) calculate.adj.M.K(D=distXYZ, X=Eucl.dist, K=kk))
 plot(K.search, LC )
 ```
 Q5. Graphical representation of the ISOMAP output
