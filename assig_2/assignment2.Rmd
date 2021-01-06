@@ -89,24 +89,23 @@ for(K in K.search) {
     conf.localMDS.S.res <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
     
     K_ <- 10
-    local_contuinity <- LC(D=distXYZ, X=dist(conf.localMDS.S.res), K_)
+    local_contuinity <- LC(D=distXYZ, X=dist(conf.localMDS.S.res[,1]), K_)
     if(is.null(best_local_contuinity) || best_local_contuinity < local_contuinity) {
       best_local_contuinity <- local_contuinity
       best_K <- K
       best_tau <- tau
-      best_conf <- conf.localMDS.S.res
+      localMDS.max <- conf.localMDS.S.res
     }
   }
 }
 
-print(best_K, best_tau)
+print(best_K)
 print(best_tau)
 
 ```
 Q3. Graphical representation of the Local MDS output For the optimal K and tau, the output of the Local MDS is a q-dimensional configuration, that is, a n×q matrix (in our case with q=1).
 ```{r Q3}
-LocalMDS.max <- best_conf
-pairs(cbind(XYZ, rt, locMDS=LocalMDS.max[,1]))
+pairs(cbind(XYZ, rt, locMDS=localMDS.max[,1]))
 ```
 
 
@@ -119,7 +118,9 @@ Q4. Choose the parameter k maximizing the Local Continuity Meta-criteria.
 k.search <- seq(4, 15)
 K_ <- 10
 
-local_contuinities <- map(k.search, function(k) LC(D=distXYZ, X=dist(isomap(distXYZ, k=k)$points), K_=K_))
+local_contuinities <- map(k.search, 
+                          function(k) 
+                            LC(D=distXYZ, X=dist(isomap(distXYZ, k=k)$points[,1]), K_=K_))
 plot(k.search, local_contuinities)
 
 best_k <- k.search[which.max(local_contuinities)]
@@ -140,10 +141,14 @@ Q6. Choose the parameter perplexity maximizing the Local Continuity Meta-criteri
 
 ```{r Q6}
 
-K_=10
-perplexity.search<-seq(9,21,by=3)
+K_ <- 10
+perplexity.search <- seq(9, 21, by=3)
 local_contuinities <- map(perplexity.search, 
-                          function(p) LC(D=distXYZ, X=dist(Rtsne(distXYZ,perplexity=p,dims=1,theta=0,pca=FALSE,max_iter=200)$Y[,1]), K_=K_))
+                          function(p) 
+                            LC(
+                              D=distXYZ, 
+                              X=dist(Rtsne(distXYZ, perplexity=p, dims=1, theta=0, pca=FALSE, max_iter=200)$Y[,1]), 
+                              K_=K_))
 plot(perplexity.search, local_contuinities)
 
 best_perplexity <- perplexity.search[which.max(local_contuinities)]
@@ -157,16 +162,16 @@ Q7. Graphical representation of the t-SNE output.
 
 
 ```{r Q7}
-Rtsne.max <- Rtsne(distXYZ,perplexity=best_perplexity,dims=1,theta=0,pca=FALSE,max_iter=200)
-pairs(cbind(XYZ,rt,tSNE=Rtsne.max$Y[,1]))
+rtsne.max <- Rtsne(distXYZ, perplexity=best_perplexity, dims=1, theta=0, pca=FALSE, max_iter=200)
+pairs(cbind(XYZ, rt, tSNE=rtsne.max$Y[,1]))
 ```
 
 Q8. Compare graphically the results of the different techniques.
 
 ```{r Q8}
-pairs(cbind(rt,locMDS=LocalMDS.max[,1], 
+pairs(cbind(rt, locMDS=localMDS.max[,1], 
             isomap=isomap.max$points[,1],  
-            tSNE=Rtsne.max$Y[,1]))
+            tSNE=rtsne.max$Y[,1]))
 
 ```
 The result obtained using tSNE scaled the data the closest to a linear representation. 
