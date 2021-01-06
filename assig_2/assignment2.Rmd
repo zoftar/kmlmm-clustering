@@ -37,29 +37,25 @@ lines3D(x,y,z,colvar = NULL,
 points3D(rx,ry,rz,col=4,pch=19,cex=.6,add=TRUE)
 ```
 
+# Local Continuity Meta-criteria
+
 Q1. Write a function that computes MadjK′ as a function of two distance matrices between points (one being computed in the high-dimensional space, an the other being the Euclidean distance matrix in the low-dimensional configuration) and the value K′.
 
 ```{r Q1}
 library(smacof)
-common.neighbors <- function(D, X, K_) {
-  wD <- as.matrix(dissWeights(D, type = "knn", k = K_))
-  wX <- as.matrix(dissWeights(X, type = "knn", k = K_))
-  rowSums(wD & wX)
-}
-
-calculate.M.K_ <- function(D, X, K_) {
-  N.K_ = mean(common.neighbors(D,X,K_))
-
-  N.K_/K_
-}
-calculate.adj.M.K_ <- function(D, X, K_) {
+LC <- function(D, X, K_) {
   # D - high dim. matrix
   # X - euclidean distance matrix
-  M.K_ <- calculate.M.K_(D, X, K_)
+  wD <- as.matrix(dissWeights(D, type = "knn", k = K_))
+  wX <- as.matrix(dissWeights(X, type = "knn", k = K_))
+  N.K_ = mean(rowSums(wD & wX))
+  M.K_ <- N.K_/K_
   M.K_-K_/(n-1)
 }
 
 ```
+
+# Choosing the tuning parameters in Local MDS
 
 Q2. Choose the pair (K,τ) maximizing the Local Continuity Meta-criteria. 
 
@@ -83,17 +79,16 @@ conf0 <- as.numeric(cmdscale(distXYZ))
 
 K.search <- c(5,10,15)
 tau.search <- c(.1, .5, 1)
-best_M.K_ <- NULL
+best_local_contuinity <- NULL
 for(K in K.search) {
   for(tau in tau.search) {
     localMDS.S.res <- optim(par=conf0, fn=Stress.LocalMDS, n=n, dist.orig=distXYZ, k=K, tau=tau, method ="BFGS", control = list(maxit=20))
     conf.localMDS.S.res <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
     
     K_ <- 10
-    M.K_ <- calculate.adj.M.K_(distXYZ, dist(conf.localMDS.S.res), K_)
-    print(M.K_)
-    if(is.null(best_M.K_) || best_M.K_ < M.K_) {
-      best_M.K_ <- M.K_
+    local_contuinity <- LC(D=distXYZ, X=dist(conf.localMDS.S.res), K_)
+    if(is.null(best_local_contuinity) || best_local_contuinity < local_contuinity) {
+      best_local_contuinity <- local_contuinity
       best_K <- K
       best_tau <- tau
       best_conf <- conf.localMDS.S.res
@@ -115,20 +110,26 @@ print(best_tau)
 Q3. Graphical representation of the Local MDS output For the optimal K and τ, the output of the Local MDS is a q-dimensional configuration, that is, a n×q matrix (in our case with q=1).
 ```{r}
 # Here we need to use q somehow:
-pairs(cbind(XYZ,rt,locMDS=best_conf[,1]))
+pairs(cbind(XYZ, rt, locMDS=best_conf[,1]))
 ```
 
 
+# Choosing the tuning parameters in ISOMAP
 
 Q4. Choose the parameter k maximizing the Local Continuity Meta-criteria.
 Use K′=10 and restrict the search of k to seq(4,15).
 
 Do a plot of the pairs (k,LC(k)) and write the optimal value of k.
 ```{r}
-k.search.range <- seq(4,15)
-K <- 10
-LC <- map(K.search.range, function(kk) calculate.adj.M.K(D=distXYZ, X=Eucl.dist, K=kk))
-plot(K.search, LC )
+library(vegan)
+
+k.search <- seq(4, 15)
+K_ <- 10
+# implement this:
+local_contuinities <- map(k.search, function(k) LC(D=distXYZ, X=dist(isomap(distXYZ, k=k)$points), K_=K_))
+plot(k.search, local_contuinities)
+
+best_k <- k.search[which.max(local_contuinities)]
 ```
 Q5. Graphical representation of the ISOMAP output
 
@@ -136,14 +137,11 @@ For the optimal K, the output of the vegan::isomap is an isomap object which ele
 
 
 ```{r}
-k <- 10
-q <- 1
-# how to find k?
-library(vegan)
-isomap.max <- vegan::isomap(distXYZ, k=10, q=q)
-pairs(cbind(XYZ,rt,isomap=isomap.max$points[,1]))
+pairs(cbind(XYZ, rt, isomap=isomap(distXYZ, k=best_k)$points[,1]))
 ```
 
+
+# Choosing the tuning parameters in t-SNE
 
 Q6. Choose the parameter perplexity maximizing the Local Continuity Meta-criteria.
 
