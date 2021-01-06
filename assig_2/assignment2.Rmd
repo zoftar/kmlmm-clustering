@@ -1,0 +1,201 @@
+---
+title: 'Assignment 2: Nonlinear Dimensionality Reduction'
+author: "Gonzalo Solera, Zofia Tarant"
+date: "6 01 2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Dataset
+```{r generate dataset}
+t <- seq(-1.5*pi,1.5*pi,l=100)
+R<- 1
+n<-75
+sd.eps <- .15
+
+set.seed(1)
+y <- R*sign(t) - R*sign(t)*cos(t/R)
+x <- -R*sin(t/R)
+z <- (y/(2*R))^2
+rt <- sort(runif(n)*3*pi - 1.5*pi)
+eps <- rnorm(n)*sd.eps
+ry <- R*sign(rt) - (R+eps)*sign(rt)*cos(rt/R)
+rx <- -(R+eps)*sin(rt/R)
+rz <- (ry/(2*R))^2 + runif(n,min=-2*sd.eps,max=2*sd.eps)
+XYZ <- cbind(rx,ry,rz)
+
+distXYZ <- dist(XYZ)
+
+require(plot3D)
+lines3D(x,y,z,colvar = NULL, 
+         phi = 20, theta = 60, r =sqrt(3), d =3, scale=FALSE,
+         col=2,lwd=4,as=1,
+         xlim=range(rx),ylim=range(ry),zlim=range(rz))
+points3D(rx,ry,rz,col=4,pch=19,cex=.6,add=TRUE)
+```
+
+Q1. Write a function that computes MadjK′ as a function of two distance matrices between points (one being computed in the high-dimensional space, an the other being the Euclidean distance matrix in the low-dimensional configuration) and the value K′.
+
+```{r Q1}
+library(smacof)
+common.neighbors <- function(D, X, k) {
+  wD <- dissWeights(D, type = "knn", k = k)
+  wD.1 <- (wD==1)
+  wD.1<-matrix(wD.1, nrow=n)
+  wX <- dissWeights(X, type = "knn", k = k)
+  wX.1 <- wX==1
+  wX.1 <- matrix(wX.1, nrow=n)
+  rowSums((wD.1 & wX.1) == TRUE)
+}
+
+calculate.M.K <- function(D, X, K) {
+  N.K = mean(common.neighbors(D,X,K))
+
+  N.K/K
+}
+calculate.adj.M.K <- function(D, X, K) {
+  # D - high dim. matrix
+  # X - euclidean distance matrix
+  M.K <- calculate.M.K(D, X, K)
+  M.K-K/(n-1)
+}
+
+```
+
+Q2. Choose the pair (K,τ) maximizing the Local Continuity Meta-criteria. 
+
+Looking for optimal K, tau according to the paper by the Chen and Buja paper from 2009 referenced in the Assignment description.
+
+```{r Q2}
+
+# Local MDS. Implemented by Pedro Delicado, December 2020
+#
+# Objective function in Local MDS, eq (7) in Chen and Buja (2009)
+Stress.LocalMDS <- function(conf,n,dist.orig,k=5,tau=1){
+  require(smacof)
+  q<-1
+  mconf <- matrix(conf,nrow = n, byrow = FALSE) # configuration matrix
+  Eucl.dist <- dist(mconf)
+  w <- dissWeights(dist.orig, type = "knn", k = k)
+  w.1 <- (w==1)
+  card.N.k <- sum(w.1)
+  card.N.k.c <- n*(n-1)/2 - card.N.k
+  t <- (card.N.k/card.N.k.c)*median(dist.orig[w.1])*tau
+  return(sum((dist.orig[w.1]-Eucl.dist[w.1])^2) - t*sum(Eucl.dist[!w.1]))
+}
+conf0 <- as.numeric(cmdscale(dist(XYZ)))
+mconf <- matrix(cmdscale(dist(XYZ)),nrow = n, byrow = FALSE) # configuration matrix
+Eucl.dist <- dist(dist(XYZ))
+
+
+k <- 10
+K.search <- c(5,10,15)
+
+
+# find optimal K 
+library(purrr)
+adjusted.M.K <- map(K.search, function(kk) calculate.adj.M.K(D=dist(XYZ), X=Eucl.dist, K=kk))
+plot(K.search, adjusted.M.K )
+
+```
+The value of adjusted MK' is best for K=5.
+```{r}
+
+# optimal K'
+K <- 5
+
+
+# Find optimal tau
+tau.search <- c(.1, .5, 1)
+for (t in tau.search) {
+  localMDS.S.res <- optim(par=conf0, fn=Stress.LocalMDS, n=n,dist.orig=dist(XYZ),k=K,tau=t,
+                        method ="BFGS", control = list(maxit=20))
+  LocalMDS.max <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
+  plot(LocalMDS.max)
+}
+# IDK how to decide which tau is the best
+```
+
+
+
+Q3. Graphical representation of the Local MDS output For the optimal K and τ, the output of the Local MDS is a q-dimensional configuration, that is, a n×q matrix (in our case with q=1).
+```{r}
+# Local MDS. Implemented by Pedro Delicado, December 2020
+#
+# Objective function in Local MDS, eq (7) in Chen and Buja (2009)
+Stress.LocalMDS <- function(conf,n,dist.orig,k=5,tau=1){
+  require(smacof)
+  q<-1
+  mconf <- matrix(conf,nrow = n, byrow = FALSE) # configuration matrix
+  Eucl.dist <- dist(mconf)
+  w <- dissWeights(dist.orig, type = "knn", k = k)
+  w.1 <- (w==1)
+  card.N.k <- sum(w.1)
+  card.N.k.c <- n*(n-1)/2 - card.N.k
+  t <- (card.N.k/card.N.k.c)*median(dist.orig[w.1])*tau
+  return(sum((dist.orig[w.1]-Eucl.dist[w.1])^2) - t*sum(Eucl.dist[!w.1]))
+}
+tau <- .5
+q<-1 
+conf0 <- as.numeric(cmdscale(dist(XYZ)))
+localMDS.S.res <- optim(par=conf0, fn=Stress.LocalMDS, n=n,dist.orig=dist(XYZ),k=k,tau=tau,
+                        method ="BFGS", control = list(maxit=20))
+LocalMDS.max <- matrix(localMDS.S.res$par, nrow = n, byrow = FALSE)
+pairs(cbind(XYZ,rt,locMDS=LocalMDS.max[,1]))
+```
+Q4. Choose the parameter k maximizing the Local Continuity Meta-criteria.
+Use K′=10 and restrict the search of k to seq(4,15).
+
+Do a plot of the pairs (k,LC(k)) and write the optimal value of k.
+```{r}
+k.search.range <- seq(4,15)
+K <- 10
+LC <- map(K.search.range, function(kk) calculate.adj.M.K(D=dist(XYZ), X=Eucl.dist, K=kk))
+plot(K.search, LC )
+```
+Q5. Graphical representation of the ISOMAP output
+
+For the optimal K, the output of the vegan::isomap is an isomap object which element points is the found q-dimensional configuration, that is, it is a n×q matrix (in our case with q=1). 
+
+
+```{r}
+k <- 10
+q <- 1
+# how to find k?
+library(vegan)
+isomap.max <- vegan::isomap(distXYZ, k=10, q=q)
+pairs(cbind(XYZ,rt,isomap=isomap.max$points[,1]))
+```
+
+
+Q6. Choose the parameter perplexity maximizing the Local Continuity Meta-criteria.
+
+Use K′=10 and restrict the search of perplexity to seq(9,21,by=3).
+
+Do a plot of the pairs (perplexity,LC(perplexity)) and write the optimal value of perplexity.
+
+```{r}
+library(tsne)
+
+```
+
+
+Q7. Graphical representation of the t-SNE output.
+
+For the optimal perplexity, the output of the Rtsne::Rtsne is a list of elements, one of them called Y contains the desired q-dimensional configuration, that is, it is a n×q matrix (in our case with q=1). Call Rtsne.max to this output and represent it using the following instruction:
+
+pairs(cbind(XYZ,rt,tSNE=Rtsne.max$Y[,1]))
+
+Q8. Compare graphically the results of the different techniques.
+
+```{r}
+pairs(cbind(rt,locMDS=LocalMDS.max[,1], 
+            isomap=isomap.max$points[,1],  
+            tSNE=Rtsne.max$Y[,1]))
+
+```
+
+
