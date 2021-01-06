@@ -174,5 +174,5 @@ pairs(cbind(rt, locMDS=localMDS.max[,1],
             tSNE=rtsne.max$Y[,1]))
 
 ```
-The result obtained using tSNE scaled the data the closest to a linear representation. 
+The result obtained using isomap scaled the data the closest to a linear representation. 
 
